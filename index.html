@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Калькулятор</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c28;
+    --accent: #7c3aed;
+    --accent2: #a855f7;
+    --accent-glow: rgba(124, 58, 237, 0.35);
+    --text: #f0eeff;
+    --text-muted: #6b6b8a;
+    --text-dim: #3d3d55;
+    --green: #10b981;
+    --red: #ef4444;
+    --border: rgba(124,58,237,0.2);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%;
+    left: -20%;
+    width: 70%;
+    height: 70%;
+    background: radial-gradient(ellipse, rgba(124,58,237,0.12) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* NAV */
+  .nav {
+    display: flex;
+    padding: 12px 16px 0;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,10,15,0.8);
+    backdrop-filter: blur(12px);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .nav-btn {
+    flex: 1;
+    padding: 10px 0;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    position: relative;
+    top: 1px;
+  }
+
+  .nav-btn.active {
+    color: var(--accent2);
+    border-bottom-color: var(--accent2);
+  }
+
+  /* PAGES */
+  .page { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+  .page.active { display: flex; }
+
+  /* ══════════════════════════════
+     CALCULATOR PAGE
+  ══════════════════════════════ */
+  .calc-page { padding: 0; }
+
+  .display-area {
+    padding: 20px 24px 12px;
+    min-height: 110px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-end;
+    gap: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .display-area::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.6;
+  }
+
+  .expr {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: right;
+    min-height: 18px;
+    word-break: break-all;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .result {
+    font-family: 'Space Mono', monospace;
+    font-size: 42px;
+    font-weight: 700;
+    color: var(--text);
+    text-align: right;
+    line-height: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+    transition: transform 0.1s, color 0.2s;
+  }
+
+  .result.error { color: var(--red); font-size: 22px; }
+  .result.pulse { animation: pulse 0.15s ease; }
+
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.04); }
+    100% { transform: scale(1); }
+  }
+
+  /* GRID */
+  .btn-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    padding: 16px;
+    flex: 1;
+  }
+
+  .btn {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 14px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.12s ease;
+    position: relative;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+  }
+
+  .btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: white;
+    opacity: 0;
+    border-radius: inherit;
+    transition: opacity 0.1s;
+  }
+
+  .btn:active::after { opacity: 0.07; }
+  .btn:active { transform: scale(0.93); }
+
+  .btn.op {
+    background: var(--surface2);
+    color: var(--accent2);
+    border-color: var(--border);
+  }
+
+  .btn.fn {
+    background: rgba(124,58,237,0.12);
+    color: var(--accent2);
+    font-size: 14px;
+    border-color: var(--border);
+  }
+
+  .btn.eq {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white;
+    border: none;
+    font-size: 22px;
+    box-shadow: 0 4px 20px var(--accent-glow);
+  }
+
+  .btn.eq:active { box-shadow: 0 2px 10px var(--accent-glow); }
+
+  .btn.zero { aspect-ratio: auto; grid-column: span 2; border-radius: 14px; }
+
+  .btn.del { color: var(--red); }
+  .btn.clr { color: #f59e0b; }
+
+  /* ══════════════════════════════
+     HISTORY PAGE
+  ══════════════════════════════ */
+  .history-page { overflow: hidden; }
+
+  .history-header {
+    padding: 14px 20px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .history-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .live-dot {
+    width: 6px; height: 6px;
+    background: var(--green);
+    border-radius: 50%;
+    animation: blink 2s infinite;
+    box-shadow: 0 0 6px var(--green);
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .clear-hist-btn {
+    background: none;
+    border: 1px solid rgba(239,68,68,0.3);
+    color: var(--red);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+
+  .clear-hist-btn:active { background: rgba(239,68,68,0.15); transform: scale(0.95); }
+
+  .history-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0 20px;
+    scroll-behavior: smooth;
+  }
+
+  .history-list::-webkit-scrollbar { width: 3px; }
+  .history-list::-webkit-scrollbar-track { background: transparent; }
+  .history-list::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 2px; }
+
+  .history-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 60%;
+    gap: 10px;
+    color: var(--text-dim);
+  }
+
+  .history-empty .icon { font-size: 40px; opacity: 0.4; }
+  .history-empty p { font-size: 13px; letter-spacing: 1px; }
+
+  .hist-item {
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    animation: slideIn 0.25s ease;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .hist-item:active { background: rgba(124,58,237,0.08); }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-12px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .hist-left { flex: 1; min-width: 0; }
+
+  .hist-expr {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hist-res {
+    font-family: 'Space Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hist-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .hist-user {
+    font-size: 10px;
+    color: var(--accent2);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    max-width: 80px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: right;
+  }
+
+  .hist-time {
+    font-size: 9px;
+    color: var(--text-dim);
+    font-family: 'Space Mono', monospace;
+  }
+
+  .hist-tag {
+    font-size: 9px;
+    background: rgba(124,58,237,0.15);
+    color: var(--accent2);
+    padding: 1px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  /* LOADING */
+  .loader {
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .loader-dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    margin: 0 3px;
+    animation: bounce 1.2s infinite;
+  }
+  .loader-dot:nth-child(2) { animation-delay: 0.2s; }
+  .loader-dot:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); opacity: 0.4; }
+    50% { transform: translateY(-6px); opacity: 1; }
+  }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    opacity: 0;
+    transition: all 0.25s;
+    z-index: 100;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- NAV -->
+  <nav class="nav">
+    <button class="nav-btn active" data-page="calc" onclick="switchPage('calc')">КАЛЬКУЛЯТОР</button>
+    <button class="nav-btn" data-page="history" onclick="switchPage('history')">ИСТОРИЯ</button>
+  </nav>
+
+  <!-- CALCULATOR PAGE -->
+  <div class="page calc-page active" id="page-calc">
+    <div class="display-area">
+      <div class="expr" id="expr"></div>
+      <div class="result" id="result">0</div>
+    </div>
+
+    <div class="btn-grid">
+      <!-- Row 1 -->
+      <button class="btn fn clr" onclick="clearAll()">AC</button>
+      <button class="btn fn" onclick="toggleSign()">+/−</button>
+      <button class="btn fn" onclick="percent()">%</button>
+      <button class="btn op" onclick="inputOp('÷')">÷</button>
+
+      <!-- Row 2 -->
+      <button class="btn" onclick="inputNum('7')">7</button>
+      <button class="btn" onclick="inputNum('8')">8</button>
+      <button class="btn" onclick="inputNum('9')">9</button>
+      <button class="btn op" onclick="inputOp('×')">×</button>
+
+      <!-- Row 3 -->
+      <button class="btn" onclick="inputNum('4')">4</button>
+      <button class="btn" onclick="inputNum('5')">5</button>
+      <button class="btn" onclick="inputNum('6')">6</button>
+      <button class="btn op" onclick="inputOp('−')">−</button>
+
+      <!-- Row 4 -->
+      <button class="btn" onclick="inputNum('1')">1</button>
+      <button class="btn" onclick="inputNum('2')">2</button>
+      <button class="btn" onclick="inputNum('3')">3</button>
+      <button class="btn op" onclick="inputOp('+')">+</button>
+
+      <!-- Row 5 -->
+      <button class="btn zero" onclick="inputNum('0')">0</button>
+      <button class="btn" onclick="inputDot()">.</button>
+      <button class="btn eq" onclick="calculate()">=</button>
+    </div>
+  </div>
+
+  <!-- HISTORY PAGE -->
+  <div class="page history-page" id="page-history">
+    <div class="history-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="live-dot"></div>
+        <span class="history-title">Все вычисления</span>
+      </div>
+      <button class="clear-hist-btn" onclick="clearHistory()">ОЧИСТИТЬ</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <div class="loader"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── Telegram WebApp init ─────────────────────────────────
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+  tg.setHeaderColor('#0a0a0f');
+  tg.setBackgroundColor('#0a0a0f');
+}
+
+const userName = tg?.initDataUnsafe?.user?.first_name
+  || tg?.initDataUnsafe?.user?.username
+  || 'Аноним';
+
+const userId = tg?.initDataUnsafe?.user?.id || 'anon_' + Math.random().toString(36).slice(2, 8);
+
+// ─── Storage helpers ──────────────────────────────────────
+async function storageGet(key, shared = false) {
+  try { return await window.storage.get(key, shared); } catch { return null; }
+}
+async function storageSet(key, val, shared = false) {
+  try { return await window.storage.set(key, val, shared); } catch { return null; }
+}
+async function storageDel(key, shared = false) {
+  try { return await window.storage.delete(key, shared); } catch { return null; }
+}
+
+// ─── Calculator state ─────────────────────────────────────
+let current = '0', prev = '', operator = '', shouldReset = false;
+
+const exprEl = document.getElementById('expr');
+const resultEl = document.getElementById('result');
+
+function updateDisplay(val, expr = '') {
+  exprEl.textContent = expr;
+  resultEl.textContent = val;
+  resultEl.className = 'result' + (val === 'Ошибка' ? ' error' : '');
+}
+
+function inputNum(n) {
+  if (shouldReset) { current = n; shouldReset = false; }
+  else { current = current === '0' ? n : current + n; }
+  updateDisplay(current, exprEl.textContent);
+  pulse();
+}
+
+function inputDot() {
+  if (shouldReset) { current = '0.'; shouldReset = false; }
+  else if (!current.includes('.')) { current += '.'; }
+  updateDisplay(current, exprEl.textContent);
+}
+
+function inputOp(op) {
+  if (prev && !shouldReset) compute(false);
+  prev = current;
+  operator = op;
+  shouldReset = true;
+  updateDisplay(current, `${prev} ${op}`);
+}
+
+function compute(final = true) {
+  if (!prev || !operator) return;
+  const a = parseFloat(prev), b = parseFloat(current);
+  let res;
+  switch (operator) {
+    case '+': res = a + b; break;
+    case '−': res = a - b; break;
+    case '×': res = a * b; break;
+    case '÷': res = b === 0 ? null : a / b; break;
+  }
+  const expr = `${prev} ${operator} ${current}`;
+  if (res === null) { updateDisplay('Ошибка', expr + ' ='); prev=''; operator=''; return; }
+
+  // round floating point issues
+  const rounded = parseFloat(res.toPrecision(12));
+  const resStr = String(rounded);
+  if (final) {
+    updateDisplay(resStr, expr + ' =');
+    saveToHistory(expr, resStr);
+    pulse();
+    prev = ''; operator = ''; current = resStr; shouldReset = true;
+  } else {
+    current = resStr;
+  }
+}
+
+function calculate() { compute(true); }
+
+function clearAll() {
+  current = '0'; prev = ''; operator = ''; shouldReset = false;
+  updateDisplay('0', '');
+}
+
+function toggleSign() {
+  current = String(parseFloat(current) * -1);
+  updateDisplay(current, exprEl.textContent);
+}
+
+function percent() {
+  current = String(parseFloat(current) / 100);
+  updateDisplay(current, exprEl.textContent);
+}
+
+function pulse() {
+  resultEl.classList.remove('pulse');
+  void resultEl.offsetWidth;
+  resultEl.classList.add('pulse');
+}
+
+// ─── Shared history ───────────────────────────────────────
+const HIST_KEY = 'calc_shared_history';
+const MAX_ITEMS = 100;
+
+async function saveToHistory(expr, result) {
+  const r = await storageGet(HIST_KEY, true);
+  let items = [];
+  if (r?.value) { try { items = JSON.parse(r.value); } catch {} }
+
+  const entry = {
+    expr, result,
+    user: userName,
+    uid: String(userId),
+    ts: Date.now()
+  };
+
+  items.unshift(entry);
+  if (items.length > MAX_ITEMS) items = items.slice(0, MAX_ITEMS);
+  await storageSet(HIST_KEY, JSON.stringify(items), true);
+}
+
+async function loadHistory() {
+  const list = document.getElementById('historyList');
+  list.innerHTML = '<div class="loader"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>';
+
+  const r = await storageGet(HIST_KEY, true);
+  let items = [];
+  if (r?.value) { try { items = JSON.parse(r.value); } catch {} }
+
+  if (!items.length) {
+    list.innerHTML = `<div class="history-empty"><div class="icon">🧮</div><p>ИСТОРИЯ ПУСТА</p></div>`;
+    return;
+  }
+
+  list.innerHTML = '';
+  items.forEach(item => {
+    const el = document.createElement('div');
+    el.className = 'hist-item';
+    const time = new Date(item.ts);
+    const hh = time.getHours().toString().padStart(2,'0');
+    const mm = time.getMinutes().toString().padStart(2,'0');
+    const dd = time.getDate().toString().padStart(2,'0');
+    const mo = (time.getMonth()+1).toString().padStart(2,'0');
+    const isMe = String(item.uid) === String(userId);
+
+    el.innerHTML = `
+      <div class="hist-left">
+        <div class="hist-expr">${escHtml(item.expr)}</div>
+        <div class="hist-res">${escHtml(item.result)}</div>
+      </div>
+      <div class="hist-right">
+        <div class="hist-user">${escHtml(item.user)}</div>
+        <div class="hist-time">${dd}.${mo} ${hh}:${mm}</div>
+        ${isMe ? '<div class="hist-tag">Я</div>' : ''}
+      </div>
+    `;
+    // tap to use result
+    el.addEventListener('click', () => {
+      current = item.result;
+      shouldReset = true;
+      updateDisplay(current, '');
+      switchPage('calc');
+      showToast('Результат скопирован в калькулятор');
+    });
+    list.appendChild(el);
+  });
+}
+
+async function clearHistory() {
+  if (!confirm('Очистить всю историю для всех пользователей?')) return;
+  await storageDel(HIST_KEY, true);
+  loadHistory();
+  showToast('История очищена');
+}
+
+// ─── Navigation ───────────────────────────────────────────
+function switchPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelector(`[data-page="${name}"]`).classList.add('active');
+  if (name === 'history') loadHistory();
+}
+
+// ─── Toast ────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ─── Utils ────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── Keyboard ────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if ('0123456789'.includes(e.key)) inputNum(e.key);
+  else if (e.key === '.') inputDot();
+  else if (e.key === '+') inputOp('+');
+  else if (e.key === '-') inputOp('−');
+  else if (e.key === '*') inputOp('×');
+  else if (e.key === '/') { e.preventDefault(); inputOp('÷'); }
+  else if (e.key === 'Enter' || e.key === '=') calculate();
+  else if (e.key === 'Backspace') {
+    if (current.length > 1) current = current.slice(0,-1);
+    else current = '0';
+    updateDisplay(current, exprEl.textContent);
+  }
+  else if (e.key === 'Escape') clearAll();
+});
+</script>
+</body>
+</html>
