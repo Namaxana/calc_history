@@ -508,15 +508,46 @@ const userName = tg?.initDataUnsafe?.user?.first_name
 
 const userId = tg?.initDataUnsafe?.user?.id || 'anon_' + Math.random().toString(36).slice(2, 8);
 
-// ─── Storage helpers ──────────────────────────────────────
-async function storageGet(key, shared = false) {
-  try { return await window.storage.get(key, shared); } catch { return null; }
+// ─── Firebase config ──────────────────────────────────────
+// 👇 Вставьте сюда URL вашей Firebase Realtime Database
+const FIREBASE_URL = 'https://realstyleultramegakalk-default-rtdb.europe-west1.firebasedatabase.app/';
+
+// ─── Firebase helpers ─────────────────────────────────────
+async function fbGet(path) {
+  try {
+    const r = await fetch(`${FIREBASE_URL}/${path}.json`);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
 }
-async function storageSet(key, val, shared = false) {
-  try { return await window.storage.set(key, val, shared); } catch { return null; }
+
+async function fbSet(path, data) {
+  try {
+    const r = await fetch(`${FIREBASE_URL}/${path}.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return r.ok;
+  } catch { return false; }
 }
-async function storageDel(key, shared = false) {
-  try { return await window.storage.delete(key, shared); } catch { return null; }
+
+async function fbPush(path, data) {
+  try {
+    const r = await fetch(`${FIREBASE_URL}/${path}.json`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return r.ok;
+  } catch { return false; }
+}
+
+async function fbDelete(path) {
+  try {
+    const r = await fetch(`${FIREBASE_URL}/${path}.json`, { method: 'DELETE' });
+    return r.ok;
+  } catch { return false; }
 }
 
 // ─── Calculator state ─────────────────────────────────────
@@ -601,34 +632,31 @@ function pulse() {
   resultEl.classList.add('pulse');
 }
 
-// ─── Shared history ───────────────────────────────────────
-const HIST_KEY = 'calc_shared_history';
+// ─── Shared history (Firebase) ────────────────────────────
+const HIST_PATH = 'calc_history';
 const MAX_ITEMS = 100;
 
 async function saveToHistory(expr, result) {
-  const r = await storageGet(HIST_KEY, true);
-  let items = [];
-  if (r?.value) { try { items = JSON.parse(r.value); } catch {} }
-
   const entry = {
     expr, result,
     user: userName,
     uid: String(userId),
     ts: Date.now()
   };
-
-  items.unshift(entry);
-  if (items.length > MAX_ITEMS) items = items.slice(0, MAX_ITEMS);
-  await storageSet(HIST_KEY, JSON.stringify(items), true);
+  await fbPush(HIST_PATH, entry);
 }
 
 async function loadHistory() {
   const list = document.getElementById('historyList');
   list.innerHTML = '<div class="loader"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>';
 
-  const r = await storageGet(HIST_KEY, true);
+  const data = await fbGet(HIST_PATH);
   let items = [];
-  if (r?.value) { try { items = JSON.parse(r.value); } catch {} }
+  if (data && typeof data === 'object') {
+    items = Object.entries(data).map(([key, val]) => ({ ...val, _key: key }));
+    items.sort((a, b) => b.ts - a.ts);
+    items = items.slice(0, MAX_ITEMS);
+  }
 
   if (!items.length) {
     list.innerHTML = `<div class="history-empty"><div class="icon">🧮</div><p>ИСТОРИЯ ПУСТА</p></div>`;
@@ -657,7 +685,6 @@ async function loadHistory() {
         ${isMe ? '<div class="hist-tag">Я</div>' : ''}
       </div>
     `;
-    // tap to use result
     el.addEventListener('click', () => {
       current = item.result;
       shouldReset = true;
@@ -671,7 +698,7 @@ async function loadHistory() {
 
 async function clearHistory() {
   if (!confirm('Очистить всю историю для всех пользователей?')) return;
-  await storageDel(HIST_KEY, true);
+  await fbDelete(HIST_PATH);
   loadHistory();
   showToast('История очищена');
 }
